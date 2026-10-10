@@ -1,0 +1,876 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0a0b0d">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>GachaCalc</title>
+<meta name="description" content="Exact pull odds, pity and top-up costs for Genshin Impact, Honkai: Star Rail, Zenless Zone Zero, Wuthering Waves, Arknights and Mobile Legends.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0b0d; --bg2:#0e1013; --surface:#121418; --raised:#171a1f; --sunk:#0c0d10;
+  --line:#1f232a; --line2:#2a2f38; --ink:#eceef1; --ink2:#a3a9b4; --ink3:#6b7280;
+  --good:#5bd18b; --warn:#f0a35e; --bad:#ef6b6b;
+  --accent:#d9a441; --on-accent:#0a0b0d;
+  --r:16px; --ease:cubic-bezier(.2,.8,.2,1); --spring:cubic-bezier(.34,1.56,.64,1);
+  --sans:'Geist',system-ui,-apple-system,sans-serif; --mono:'Geist Mono',ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%;background:var(--bg)}
+:root{color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+button,input,select{font:inherit;color:inherit}
+::selection{background:var(--accent);color:var(--on-accent)}
+
+/* film grain + a faint grid that fades out — texture, not decoration */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:56px 56px;mask-image:radial-gradient(ellipse 80% 50% at 50% 0%,#000 10%,transparent 70%);-webkit-mask-image:radial-gradient(ellipse 80% 50% at 50% 0%,#000 10%,transparent 70%)}
+body::after{content:"";position:fixed;inset:-50%;pointer-events:none;z-index:100;opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");animation:grain 1.2s steps(6) infinite}
+@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-3%,2%)}40%{transform:translate(2%,-3%)}60%{transform:translate(-2%,-1%)}80%{transform:translate(3%,3%)}100%{transform:translate(0,0)}}
+
+/* the accent light at the top changes colour with the game */
+.halo{position:fixed;left:50%;top:-340px;width:900px;height:520px;transform:translateX(-50%);pointer-events:none;z-index:0;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 22%,transparent),transparent);filter:blur(10px);transition:background .8s var(--ease)}
+
+.wrap{position:relative;z-index:1;max-width:1140px;margin:0 auto;padding:0 22px}
+header{padding:30px 0 22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:19px;letter-spacing:-.02em}
+.mark{width:34px;height:34px;border-radius:10px;background:var(--raised);border:1px solid var(--line2);display:grid;place-items:center;position:relative;overflow:hidden}
+.mark svg{width:18px;height:18px}
+.mark::after{content:"";position:absolute;inset:0;background:conic-gradient(from var(--ang,0deg),transparent 70%,var(--accent) 85%,transparent);animation:spin 4s linear infinite;opacity:.55;mask:radial-gradient(circle,transparent 58%,#000 60%);-webkit-mask:radial-gradient(circle,transparent 58%,#000 60%)}
+@property --ang{syntax:'<angle>';initial-value:0deg;inherits:false}
+@keyframes spin{to{--ang:360deg}}
+.tag{color:var(--ink3);font-size:13.5px}
+.tag b{color:var(--ink2);font-weight:500}
+
+nav.games{display:flex;gap:6px;flex-wrap:wrap;padding:4px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;width:max-content;max-width:100%;position:relative}
+.chip{position:relative;z-index:1;border:0;background:transparent;padding:9px 14px;border-radius:10px;cursor:pointer;font-weight:500;font-size:14px;color:var(--ink2);transition:color .25s var(--ease)}
+.chip:hover{color:var(--ink)}
+.chip[aria-pressed="true"]{color:var(--ink)}
+.chip .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:8px;vertical-align:1px;box-shadow:0 0 0 0 currentColor;transition:box-shadow .3s}
+.chip[aria-pressed="true"] .dot{box-shadow:0 0 12px 2px var(--c)}
+.pill{position:absolute;z-index:0;top:4px;height:calc(100% - 8px);border-radius:10px;background:var(--raised);border:1px solid var(--line2);transition:left .45s var(--spring),width .45s var(--spring);box-shadow:0 6px 20px -8px rgba(0,0,0,.6)}
+
+main{padding:34px 0 70px;min-height:70vh}
+.gamehead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+.eyebrow{font:500 12px var(--mono);color:var(--accent);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.eyebrow::before{content:"";width:18px;height:1px;background:currentColor}
+.gamehead h1{font-weight:700;font-size:clamp(34px,5.4vw,58px);line-height:1;letter-spacing:-.04em}
+.gamehead h1 .ch{display:inline-block;opacity:.3;transform:translateY(.3em);filter:blur(3px);animation:charIn .7s var(--ease) forwards;animation-delay:calc(var(--i)*22ms)}
+@keyframes charIn{to{opacity:1;transform:none;filter:none}}
+.gamehead p{color:var(--ink3);font:13px var(--mono)}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:22px;position:relative;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{border:0;background:transparent;padding:11px 14px 13px;cursor:pointer;font-weight:500;font-size:14px;white-space:nowrap;color:var(--ink3);transition:color .2s}
+.tab:hover{color:var(--ink2)}
+.tab[aria-selected="true"]{color:var(--ink)}
+.tabline{position:absolute;bottom:-1px;height:2px;background:var(--accent);border-radius:2px;transition:left .4s var(--spring),width .4s var(--spring),background .6s;box-shadow:0 0 12px var(--accent)}
+
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:14px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.card{position:relative;background:linear-gradient(180deg,var(--raised),var(--surface) 40%);border:1px solid var(--line);border-radius:var(--r);padding:22px;overflow:hidden;
+  opacity:.35;transform:translateY(14px);animation:rise .7s var(--ease) forwards;animation-delay:calc(var(--d,0)*70ms + 80ms)}
+@keyframes rise{to{opacity:1;transform:none}}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .3s;
+  background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--accent) 9%,transparent),transparent 60%)}
+.card::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;padding:1px;opacity:0;transition:opacity .3s;
+  background:radial-gradient(300px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--accent) 55%,transparent),transparent 60%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.card:hover::before,.card:hover::after{opacity:1}
+.card>*{position:relative}
+.card h2{font:500 11.5px var(--mono);text-transform:uppercase;letter-spacing:.09em;color:var(--ink3);margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.card h2 .n{color:var(--accent)}
+
+.field{margin-bottom:16px}
+.field>label,.lbl{display:block;font-size:13px;font-weight:500;color:var(--ink2);margin-bottom:7px}
+.hint{font-size:12.5px;color:var(--ink3);margin-top:6px}
+input[type=number],input[type=text],select{width:100%;background:var(--sunk);border:1px solid var(--line2);border-radius:10px;padding:11px 13px;font-size:15px;outline:none;transition:border-color .2s,box-shadow .25s,background .2s}
+input[type=number]{font-family:var(--mono);-moz-appearance:textfield}
+input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input:hover,select:hover{border-color:#39404b}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 16%,transparent);background:var(--bg)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stepper{position:relative}
+.stepper input{padding-right:74px}
+.stepper .sb{position:absolute;top:5px;bottom:5px;width:30px;border:0;border-radius:7px;background:var(--raised);color:var(--ink2);cursor:pointer;font:500 16px var(--mono);transition:background .15s,transform .15s var(--spring)}
+.stepper .sb:hover{background:var(--line2);color:var(--ink)}
+.stepper .sb:active{transform:scale(.88)}
+.stepper .m{right:39px}.stepper .p{right:5px}
+
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{border:1px solid var(--line2);background:var(--sunk);border-radius:9px;padding:8px 11px;cursor:pointer;font:500 13px var(--mono);min-width:46px;transition:all .25s var(--ease)}
+.seg button:hover{border-color:#3d444f;transform:translateY(-1px)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent);box-shadow:0 6px 18px -6px var(--accent);animation:pop .4s var(--spring)}
+@keyframes pop{0%{transform:scale(.88)}100%{transform:scale(1)}}
+.toggle{display:flex;gap:8px}
+.toggle button{flex:1;border:1px solid var(--line2);background:var(--sunk);border-radius:11px;padding:11px 12px;cursor:pointer;font-size:14px;font-weight:500;text-align:left;transition:all .25s var(--ease)}
+.toggle button:hover{border-color:#3d444f}
+.toggle button[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--sunk));box-shadow:inset 0 0 0 1px var(--accent)}
+.toggle small{display:block;color:var(--ink3);font-size:12px;font-weight:400;margin-top:3px;line-height:1.4}
+
+.big{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+.big .n{font:600 clamp(58px,9vw,92px)/.9 var(--sans);letter-spacing:-.055em;font-variant-numeric:tabular-nums;background:linear-gradient(180deg,var(--ink) 40%,color-mix(in srgb,var(--ink) 55%,var(--accent)));-webkit-background-clip:text;background-clip:text;color:transparent}
+.big .n sup{font-size:.42em;letter-spacing:-.02em;vertical-align:.95em;margin-left:2px}
+.big .of{color:var(--ink2);font-size:14.5px;max-width:260px;padding-bottom:8px}
+.verdict{display:flex;align-items:center;gap:10px;font-size:14px;margin:10px 0 20px;padding:11px 14px;border-radius:11px;border:1px solid var(--line2);background:var(--sunk);transition:all .4s var(--ease)}
+.verdict i{width:8px;height:8px;border-radius:50%;flex:none;background:var(--v,var(--ink3));box-shadow:0 0 0 0 var(--v);animation:ping 2s var(--ease) infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--v) 60%,transparent)}70%,100%{box-shadow:0 0 0 9px transparent}}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:18px}
+@media (max-width:560px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stat{background:var(--sunk);border:1px solid var(--line);border-radius:11px;padding:12px 13px;transition:border-color .25s,transform .25s var(--ease)}
+.stat:hover{border-color:var(--line2);transform:translateY(-2px)}
+.stat .v{font:500 20px/1.15 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat .k{font-size:12px;color:var(--ink3);margin-top:4px}
+
+.chartbox{position:relative;margin-top:4px}
+.chart{width:100%;height:auto;display:block;overflow:visible}
+.chart text{font:10.5px var(--mono);fill:var(--ink3)}
+.chart .line{fill:none;stroke:var(--accent);stroke-width:2.25;stroke-linejoin:round;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--accent) 60%,transparent))}
+.chart .line.draw{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:draw 1.3s var(--ease) .15s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.chart .area{opacity:0;animation:fadein .9s var(--ease) .6s forwards}
+@keyframes fadein{to{opacity:1}}
+.chart .you circle.ring{fill:none;stroke:var(--ink);stroke-width:1.5;animation:ring 2.2s var(--ease) infinite;transform-box:fill-box;transform-origin:center}
+@keyframes ring{0%{transform:scale(.6);opacity:1}100%{transform:scale(2.4);opacity:0}}
+.chart .hover{opacity:0;transition:opacity .15s;pointer-events:none}
+.chartbox:hover .hover{opacity:1}
+.tip{position:absolute;top:0;left:0;pointer-events:none;background:var(--raised);border:1px solid var(--line2);border-radius:9px;padding:7px 10px;font:12px var(--mono);white-space:nowrap;opacity:0;transform:translate(-50%,-115%);transition:opacity .15s;box-shadow:0 10px 30px -10px #000}
+.tip b{color:var(--accent);font-weight:600}
+.chartbox:hover .tip{opacity:1}
+
+.costs{width:100%;border-collapse:collapse;font-size:14px}
+.costs td,.costs th{padding:13px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.costs th{font:500 11px var(--mono);color:var(--ink3);text-transform:uppercase;letter-spacing:.07em}
+.costs td.num{font-family:var(--mono);text-align:right}
+.costs td.num .hint{font-size:12px}
+.costs tbody tr{opacity:0;animation:rise .55s var(--ease) forwards;animation-delay:calc(var(--d)*90ms + 250ms)}
+.costs tbody tr:hover td{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.costs tr:last-child td{border-bottom:0}
+.price{font-size:17px;font-weight:600;color:var(--ink)}
+.ok{color:var(--good)}
+@media (max-width:560px){.costs{font-size:13px}.costs td,.costs th{padding:10px 2px}}
+.note{font-size:13px;color:var(--ink3);margin-top:14px;line-height:1.55}
+.note strong{color:var(--ink2);font-weight:500}
+
+.rules dl{display:grid;grid-template-columns:max-content 1fr;gap:9px 22px;font-size:14px}
+.rules dt{color:var(--ink3)}
+.rules dd{font-family:var(--mono);font-size:13.5px;color:var(--ink)}
+.rules dd.t{font-family:var(--sans);color:var(--ink2)}
+.src{margin-top:18px;font-size:13px;color:var(--ink3);border-top:1px solid var(--line);padding-top:16px}
+.src strong{display:block;font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.09em;margin-bottom:8px}
+.src ol{list-style:none;counter-reset:s}
+.src li{counter-increment:s;margin:5px 0;display:flex;gap:10px}
+.src li::before{content:counter(s,decimal-leading-zero);font-family:var(--mono);color:var(--accent);opacity:.8}
+.src a{color:var(--ink2);text-decoration:none;background:linear-gradient(var(--accent),var(--accent)) 0 100%/0 1px no-repeat;transition:background-size .35s var(--ease),color .2s}
+.src a:hover{color:var(--ink);background-size:100% 1px}
+.mt{margin-top:14px}
+
+.btn{position:relative;border:0;background:var(--accent);color:var(--on-accent);padding:12px 20px;border-radius:11px;cursor:pointer;font-weight:600;overflow:hidden;transition:transform .2s var(--spring),box-shadow .3s;box-shadow:0 10px 30px -12px var(--accent)}
+.btn:hover{transform:translateY(-2px)}
+.btn:active{transform:scale(.96)}
+.btn::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%);transform:translateX(-100%)}
+.btn:hover::after{transition:transform .7s var(--ease);transform:translateX(100%)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line2);box-shadow:none}
+
+/* pull reveal */
+.reel{display:grid;grid-template-columns:repeat(auto-fill,minmax(26px,1fr));gap:5px;margin-top:18px}
+.tile{aspect-ratio:1;border-radius:6px;background:var(--sunk);border:1px solid var(--line);position:relative;opacity:0;transform:scale(.4);animation:tileIn .35s var(--spring) forwards;animation-delay:calc(var(--i)*14ms)}
+@keyframes tileIn{to{opacity:1;transform:none}}
+.tile.f{background:var(--accent);border-color:var(--accent);z-index:2;animation:tileIn .35s var(--spring) forwards,burst 1s var(--ease) forwards;animation-delay:calc(var(--i)*14ms),calc(var(--i)*14ms)}
+.tile.o{background:var(--warn);border-color:var(--warn)}
+@keyframes burst{0%{box-shadow:0 0 0 0 var(--accent)}40%{box-shadow:0 0 0 10px color-mix(in srgb,var(--accent) 30%,transparent),0 0 40px 10px var(--accent)}100%{box-shadow:0 0 18px 0 color-mix(in srgb,var(--accent) 50%,transparent)}}
+.tile span{position:absolute;inset:0;display:grid;place-items:center;font:600 9px var(--mono);color:var(--on-accent)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink3);margin-top:14px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.flash{position:fixed;inset:0;pointer-events:none;z-index:50;background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--accent) 40%,transparent),transparent 60%);opacity:0}
+.flash.go{animation:flash 1s var(--ease)}
+@keyframes flash{0%{opacity:0}15%{opacity:1}100%{opacity:0}}
+.simsum{display:flex;gap:24px;flex-wrap:wrap;margin-top:18px}
+.simsum div{font:500 13px var(--mono);color:var(--ink3)}
+.simsum b{display:block;font:600 30px var(--sans);letter-spacing:-.03em;color:var(--ink)}
+
+.hero{display:flex;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line);animation:rise .5s var(--ease) both}
+.hero:last-child{border-bottom:0}
+.hero .nm{font-weight:600}
+.hero .meta{font-size:12.5px;color:var(--ink3);font-family:var(--mono)}
+.bar{height:4px;background:var(--sunk);border-radius:4px;overflow:hidden;margin-top:9px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:4px;transform-origin:left;animation:grow 1s var(--ease) both}
+@keyframes grow{from{transform:scaleX(0)}}
+.mini{border:1px solid var(--line2);background:transparent;border-radius:8px;padding:6px 11px;cursor:pointer;font-size:12.5px;color:var(--ink2);transition:all .2s}
+.mini:hover{color:var(--ink);border-color:#3d444f}
+.empty{color:var(--ink3);font-size:14px}
+footer{position:relative;z-index:1;border-top:1px solid var(--line);padding:24px 0 44px;color:var(--ink3);font-size:12.5px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+footer span.m{font-family:var(--mono)}
+
+/* game switch: the new page grows out of the button you pressed */
+::view-transition-old(root){animation:none}
+::view-transition-new(root){animation:reveal .75s var(--ease)}
+@keyframes reveal{from{clip-path:circle(0 at var(--vx,50%) var(--vy,0))}to{clip-path:circle(150% at var(--vx,50%) var(--vy,0))}}
+
+
+/* simpler layout pieces */
+.answer{font-size:16px;line-height:1.55;color:var(--ink2);max-width:62ch}
+.answer b{color:var(--ink);font-weight:600}
+.answer .money{font:600 26px/1.2 var(--sans);color:var(--ink);letter-spacing:-.02em;display:block;margin:6px 0 2px}
+.plans{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.plans button{border:1px solid var(--line2);background:var(--sunk);border-radius:999px;padding:7px 13px;cursor:pointer;font-size:13.5px;transition:all .2s var(--ease)}
+.plans button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+details.more{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+details.more summary{cursor:pointer;list-style:none;font-size:13.5px;color:var(--ink2);display:flex;align-items:center;gap:8px;width:max-content}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::before{content:"+";font:500 15px var(--mono);color:var(--accent);width:14px;transition:transform .25s var(--ease)}
+details.more[open] summary::before{transform:rotate(45deg)}
+details.more summary:hover{color:var(--ink)}
+details.more>div{animation:rise .4s var(--ease) both}
+.live{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-bottom:22px}
+.lv{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:13px 14px;min-width:0;animation:rise .6s var(--ease) both;animation-delay:calc(var(--i)*60ms)}
+.lv .k{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.07em;color:var(--ink3);display:flex;align-items:center;gap:7px}
+.lv .k i{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 var(--good);animation:ping 2s var(--ease) infinite;--v:var(--good)}
+.lv.soon .k i{background:var(--ink3);animation:none}
+.lv.maybe .k i{background:var(--warn);animation:none}
+.lv .t{font-weight:600;margin-top:6px;font-size:15px}
+.lv .d{font-size:12.5px;color:var(--ink3);margin-top:2px}
+.lv .d b{color:var(--ink2);font-weight:500;font-family:var(--mono)}
+.livehead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.livehead h3{font:500 11.5px var(--mono);text-transform:uppercase;letter-spacing:.09em;color:var(--ink3)}
+.livehead span{font-size:12px;color:var(--ink3)}
+.livehead a{color:var(--ink3)}
+.confirm{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink2)}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0ms!important;transition-duration:.01ms!important}
+  .card,.costs tbody tr,.tile,.gamehead h1 .ch{opacity:1!important;transform:none!important;filter:none!important}
+  .chart .line.draw{stroke-dashoffset:0!important}
+}
+</style></head><body>
+<div class="halo"></div>
+<div class="flash" id="flash"></div>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18 L9 11 L13 14 L20 5"/><circle cx="20" cy="5" r="1.6" fill="currentColor" stroke="none"/></svg></span>GachaCalc</div>
+    <p class="tag">Exact odds from <b>published rates</b>. Every number is sourced.</p>
+  </header>
+  <nav class="games" id="games" aria-label="Choose a game"></nav>
+  <main id="app"></main>
+  <footer><span>Rates and prices last checked <span class="m" id="checked"></span>. US store prices, no first-purchase bonus. Prices vary by region.</span><span>Not affiliated with any publisher.</span></footer>
+</div>
+<script>
+/* ============================================================
+   GAME DATA — every number here comes from the sources listed
+   with the game. To add a game, add one object to GAMES.
+   Soft-pity "inc" values are estimates: the published hard pity
+   and base rate are fixed, and inc is tuned so the average
+   matches the published "consolidated" (including guarantee) rate.
+   ============================================================ */
+const CHECKED = '9 October 2026';
+const HOYO_PACKS = [[60,0.99],[330,4.99],[1090,14.99],[2240,29.99],[3880,49.99],[8080,99.99]];
+
+const GAMES = {
+  genshin:{
+    name:'Genshin Impact', short:'Genshin', color:'#d9a441',
+    currency:'Primogems', perPull:160, ticket:'Intertwined Fates', packs:HOYO_PACKS, packName:'Genesis Crystals',
+    pass:{name:'Blessing of the Welkin Moon', price:4.99, amount:3000, desc:'300 Genesis Crystals now + 90 Primogems a day for 30 days'},
+    banners:{
+      char:{label:'Character Event Wish', item:'character', copies:['C0','C1','C2','C3','C4','C5','C6'],
+        base:0.006, soft:74, inc:0.053, hard:90, q:0.55, guar:true, consolidated:'1.6%',
+        qNote:'55% overall to win the 50/50, counting Capturing Radiance (added in 5.0). Lose it and the next 5★ is guaranteed.',
+        guarLabels:['50/50','Guaranteed'], guarHelp:['Your last 5★ was the featured character (or this is your first).','You lost your last 50/50, so the next 5★ is the featured character.']},
+      weapon:{label:'Weapon Event Wish', item:'weapon', copies:['R1','R2','R3','R4','R5'],
+        base:0.007, soft:63, inc:0.043, hard:80, q:0.375, guar:true, consolidated:'1.85%',
+        qNote:'75% of 5★ weapons are one of the two featured weapons, so 37.5% is the one you charted. Any other 5★ gives 1 Fate Point, and 1 point guarantees your charted weapon. Fate Points reset when the banner ends.',
+        guarLabels:['0 Fate Points','1 Fate Point'], guarHelp:['No Fate Point yet on this banner.','Your next 5★ weapon is the one you charted.']}
+    },
+    combo:['char','weapon'],
+    sources:[
+      ['Genshin Impact Wiki — Weapon Event Wish (rates, Epitomized Path)','https://genshin-impact.fandom.com/wiki/Weapon_Event_Wish'],
+      ['GameWith — Capturing Radiance (10% on a lost 50/50, 55% overall)','https://gamewith.net/genshin-impact/article/show/47800'],
+      ['GameWith — Genesis Crystal prices and Welkin Moon','https://gamewith.net/genshin-impact/article/show/22406']
+    ]
+  },
+  hsr:{
+    name:'Honkai: Star Rail', short:'Star Rail', color:'#9a86ff',
+    currency:'Stellar Jade', perPull:160, ticket:'Special Passes', packs:HOYO_PACKS, packName:'Oneiric Shards',
+    pass:{name:'Express Supply Pass', price:4.99, amount:3000, desc:'300 Oneiric Shards now + 90 Stellar Jade a day for 30 days'},
+    banners:{
+      char:{label:'Character Event Warp', item:'character', copies:['E0','E1','E2','E3','E4','E5','E6'],
+        base:0.006, soft:74, inc:0.053, hard:90, q:0.5, guar:true, consolidated:'1.6%',
+        qNote:'50% chance each 5★ is the featured character. Lose it and the next 5★ is guaranteed. Pity and guarantee carry over to the next character banner.',
+        guarLabels:['50/50','Guaranteed'], guarHelp:['Your last 5★ was the featured character (or this is your first).','You lost your last 50/50.']},
+      lc:{label:'Light Cone Event Warp', item:'Light Cone', copies:['S1','S2','S3','S4','S5'],
+        base:0.008, soft:66, inc:0.0667, hard:80, q:0.75, guar:true, consolidated:'1.87%',
+        qNote:'75% chance each 5★ is the featured Light Cone. Lose it and the next 5★ is guaranteed.',
+        guarLabels:['75/25','Guaranteed'], guarHelp:['Your last 5★ Light Cone was the featured one (or this is your first).','You lost your last 75/25.']}
+    },
+    combo:['char','lc'],
+    sources:[
+      ['Honkai: Star Rail Wiki — Light Cone Event Warp','https://honkai-star-rail.fandom.com/wiki/Light_Cone_Event_Warp'],
+      ['Twinfinite — Star Rail pity and banner rates','https://twinfinite.net/guides/honkai-star-rail-pity-system-explained/'],
+      ['Epic Games Store — Express Supply Pass contents','https://store.epicgames.com/p/honkai-star-rail-express-supply-pass-b72410'],
+      ['GenshinBuilds — Oneiric Shard packs','https://genshin-builds.com/en/hsr/blog/honkai-star-rail-top-up-guide-best-value-tips']
+    ]
+  },
+  zzz:{
+    name:'Zenless Zone Zero', short:'ZZZ', color:'#c8e04e',
+    currency:'Polychromes', perPull:160, ticket:'Encrypted Master Tapes', packs:HOYO_PACKS, packName:'Monochromes',
+    pass:{name:'Inter-Knot Membership', price:4.99, amount:3000, desc:'300 Monochromes now + 90 Polychromes a day for 30 days'},
+    banners:{
+      agent:{label:'Exclusive Channel', item:'Agent', copies:['M0','M1','M2','M3','M4','M5','M6'],
+        base:0.006, soft:74, inc:0.053, hard:90, q:0.5, guar:true, consolidated:'1.6%',
+        qNote:'50% chance each S-Rank is the featured Agent. Lose it and the next S-Rank is guaranteed. Pity and guarantee carry over.',
+        guarLabels:['50/50','Guaranteed'], guarHelp:['Your last S-Rank was the featured Agent (or this is your first).','You lost your last 50/50.']},
+      wengine:{label:'W-Engine Channel', item:'W-Engine', copies:['R1','R2','R3','R4','R5'],
+        base:0.01, soft:65, inc:0.0552, hard:80, q:0.75, guar:true, consolidated:'2%',
+        qNote:'75% chance each S-Rank W-Engine is the featured one. Lose it and the next is guaranteed.',
+        guarLabels:['75/25','Guaranteed'], guarHelp:['Your last S-Rank W-Engine was the featured one.','You lost your last 75/25.']}
+    },
+    combo:['agent','wengine'],
+    sources:[
+      ['Icy Veins — Exclusive Channel rates (updated Sep 2026)','https://www.icy-veins.com/zenless-zone-zero/exclusive-channel'],
+      ['Icy Veins — W-Engine Channel rates','https://www.icy-veins.com/zenless-zone-zero/w-engine-channel'],
+      ['Codashop — Monochrome prices and 1:160 tape rate','https://news.codashop.com/us/?p=16723']
+    ]
+  },
+  wuwa:{
+    name:'Wuthering Waves', short:'WuWa', color:'#4cc3b7',
+    currency:'Astrite', perPull:160, ticket:'Radiant / Forging Tides', packs:HOYO_PACKS, packName:'Lunite',
+    pass:{name:'Lunite Subscription', price:4.99, amount:3000, desc:'300 Lunite now + 90 Astrite a day for 30 days'},
+    banners:{
+      char:{label:'Featured Resonator Convene', item:'Resonator', copies:['S0','S1','S2','S3','S4','S5','S6'],
+        base:0.008, soft:66, inc:0.0205, hard:80, q:0.5, guar:true, consolidated:'1.8%',
+        qNote:'50% chance each 5★ is the featured Resonator. Lose it and the next 5★ is guaranteed.',
+        guarLabels:['50/50','Guaranteed'], guarHelp:['Your last 5★ was the featured Resonator (or this is your first).','You lost your last 50/50.']},
+      weapon:{label:'Featured Weapon Convene', item:'weapon', copies:['R1','R2','R3','R4','R5'],
+        base:0.008, soft:66, inc:0.0205, hard:80, q:1, guar:false, consolidated:'1.8%',
+        qNote:'Every 5★ on this banner is the featured weapon. There is no 50/50.'}
+    },
+    combo:['char','weapon'],
+    sources:[
+      ['Wuthering Waves Wiki — Featured Resonator Convene','https://wutheringwaves.fandom.com/wiki/Featured_Resonator_Convene'],
+      ['Wuthering Waves Wiki — Featured Weapon Convene','https://wutheringwaves.fandom.com/wiki/Featured_Weapon_Convene'],
+      ['GameWith — Lunite prices and Lunite Subscription','https://gamewith.net/wutheringwaves/45392']
+    ]
+  },
+  arknights:{
+    name:'Arknights', short:'Arknights', color:'#ef7a45',
+    currency:'Orundum', perPull:600, ticket:'Headhunting Permits', packs:null,
+    banners:{
+      standard:{label:'Standard banner (2 rate-ups)', item:'operator', copies:['1 copy','2 copies','3 copies','4 copies','5 copies','6 copies'],
+        base:0.02, soft:51, inc:0.02, hard:99, q:0.25, guar:false, consolidated:'2.89%',
+        qNote:'50% of 6★s are a rate-up, split between two operators, so 25% is the one you want. There is no guarantee after a loss. Pity carries over between standard banners.'},
+      single:{label:'Single rate-up banner', item:'operator', copies:['1 copy','2 copies','3 copies','4 copies','5 copies','6 copies'],
+        base:0.02, soft:51, inc:0.02, hard:99, q:0.5, guar:false, rule150:true, consolidated:'2.89%',
+        qNote:'50% of 6★s are the rate-up. If they have not appeared after 150 pulls on the banner, the next 6★ is the rate-up (first copy only).'},
+      limited:{label:'Limited banner', item:'limited operator', copies:['1 copy','2 copies','3 copies','4 copies','5 copies','6 copies'],
+        base:0.02, soft:51, inc:0.02, hard:99, q:0.35, guar:false, spark:300, consolidated:'2.89%',
+        qNote:'70% of 6★s are a rate-up, split between two operators, so 35% is the limited one. Each pull gives a Headhunting Data Contract; 300 buys the limited operator. Pity is separate from other banners.'}
+    },
+    combo:null,
+    sources:[
+      ['Arknights Terra Wiki — Headhunting banners (rate-ups, 150 and 300 rules)','https://arknights.wiki.gg/wiki/Headhunting_banners'],
+      ['Arknights Terra Wiki — Headhunting Data Contract','https://arknights.wiki.gg/wiki/Headhunting_Data_Contract']
+    ]
+  },
+  mlbb:{ name:'Mobile Legends', short:'MLBB', color:'#5b8cff', special:true,
+    sources:[
+      ['Codashop — Magic Wheel: 60 per draw, 270 for 5 draws, Magic Cores','https://news.codashop.com/id/mlbb-revamped-magic-wheel/'],
+      ['Codashop — Weekly Diamond Pass: 80 now + 20 a day for 7 days','https://news.codashop.com/my/top-up-ml-weekly-diamond-pass/'],
+      ['esports.gg — Zodiac Summon: 20 Diamonds, 1–5 Star Power, 100 for the skin','https://cache.esports.gg/news/mobile-legends-bang-bang/mlbb-zodiac-skins-full-list-price-and-how-to-get-them'],
+      ['esports.gg — Exquisite Collection revamp: half-price daily draw, 30% off first 10x','https://esports.gg/news/mobile-legends-bang-bang/mlbb-exquisite-collection-revamp-guide'],
+      ['Topuplist — Exquisite Collection draw price: 50, or 25 for the daily draw','https://topuplist.com/blogs/detail/mlbb-july-exquisite-collection-helcurt-kaiju-of-the-deep-draw-guide']
+    ]
+  }
+};
+
+/* ============================================================
+   ENGINE — exact probabilities, no simulation.
+   ============================================================ */
+function rateAt(b,i){ if(i>=b.hard) return 1; if(i<b.soft) return b.base; return Math.min(1,b.base+b.inc*(i-b.soft+1)); }
+
+// Probability that the N-th target copy arrives on exactly pull t.
+function pullDist(b,{pity=0,guaranteed=false,copies=1,bannerPulls=0}={}){
+  const H=b.hard, N=copies, P=[0], T=4000;
+  let cur=[]; for(let c=0;c<N;c++){cur.push([new Float64Array(H),new Float64Array(H)]);}
+  cur[0][guaranteed?1:0][Math.min(pity,H-1)]=1;
+  let left=1, sparked=false;
+  for(let t=1;t<=T && left>1e-10;t++){
+    const nx=[]; for(let c=0;c<N;c++) nx.push([new Float64Array(H),new Float64Array(H)]);
+    let done=0; const onBanner=bannerPulls+t;
+    for(let c=0;c<N;c++) for(let g=0;g<2;g++){ const row=cur[c][g];
+      for(let p=0;p<H;p++){ const m=row[p]; if(!m) continue;
+        const r=rateAt(b,p+1);
+        if(r<1) nx[c][g][p+1]+=m*(1-r);
+        const hit=m*r; let q=g?1:b.q;
+        if(b.rule150 && c===0 && onBanner>150) q=1;
+        const f=hit*q, miss=hit-f;
+        if(c+1>=N) done+=f; else nx[c+1][0][0]+=f;
+        if(miss) nx[c][b.guar?1:0][0]+=miss;
+      }}
+    if(b.spark && !sparked && onBanner>=b.spark){ sparked=true;
+      for(let c=N-1;c>=0;c--) for(let g=0;g<2;g++) for(let p=0;p<H;p++){ const m=nx[c][g][p]; if(!m) continue; nx[c][g][p]=0;
+        if(c+1>=N) done+=m; else nx[c+1][g][p]+=m; }
+    }
+    P.push(done); left-=done; cur=nx;
+  }
+  return P;
+}
+// capped = the game guarantees the goal within a fixed number of pulls.
+function summarize(P,worstVal=null){ const capped=worstVal;
+  let cdf=[0],s=0,mean=0; for(let t=1;t<P.length;t++){s+=P[t];cdf.push(s);mean+=t*P[t];}
+  const at=x=>{for(let t=1;t<cdf.length;t++) if(cdf[t]>=x) return t; return cdf.length-1;};
+  const worst=capped;
+  return {cdf,mean,median:at(.5),p90:at(.9),worst,chance:n=>n<=0?0:cdf[Math.min(n,cdf.length-1)]};
+}
+// Worst case, walked step by step: every 5★ lands on hard pity and loses whenever it can.
+function worstPulls(b,{pity=0,guaranteed=false,copies=1,bannerPulls=0}={}){
+  if(!isCapped(b,copies)) return null;
+  let t=0,p=pity,g=guaranteed,c=0;
+  for(let k=0;k<1000;k++){
+    t+=b.hard-p; p=0; const on=bannerPulls+t;
+    if(b.spark && copies===1 && on>=b.spark) return Math.max(1,b.spark-bannerPulls);
+    const win=g||b.q===1||(b.rule150&&c===0&&on>150);
+    if(win){ c++; g=false; if(c>=copies) return t; } else g=b.guar;
+  }
+  return null;
+}
+function isCapped(b,copies){ return b.guar || b.q===1 || (copies===1 && !!(b.spark||b.rule150)); }
+function convolve(A,B){ const C=new Float64Array(A.length+B.length-1);
+  for(let i=1;i<A.length;i++){ if(A[i]<1e-13) continue; for(let j=1;j<B.length;j++) C[i+j]+=A[i]*B[j]; } return Array.from(C); }
+
+// Cheapest mix of packs (packs can repeat) that covers at least `need` currency.
+function cheapestPacks(packs,need){
+  if(need<=0) return {cost:0,mix:[]};
+  const unit=10, n=Math.ceil(need/unit), big=Math.max(...packs.map(p=>p[0]))/unit, L=n+big;
+  const best=new Float64Array(L+1).fill(Infinity), from=new Int16Array(L+1).fill(-1); best[0]=0;
+  for(let a=1;a<=L;a++) packs.forEach(([amt,pr],k)=>{const u=amt/unit; if(u<=a && best[a-u]+pr<best[a]){best[a]=best[a-u]+pr;from[a]=k;}});
+  let bi=n; for(let a=n;a<=L;a++) if(best[a]<best[bi]) bi=a;
+  const count={}; let a=bi; while(a>0){const k=from[a]; count[k]=(count[k]||0)+1; a-=packs[k][0]/unit;}
+  return {cost:best[bi], mix:Object.entries(count).map(([k,c])=>[packs[k],c]).sort((x,y)=>y[0][0]-x[0][0])};
+}
+
+
+
+/* ============================================================
+   LIVE NOW — what's running in each game. The weekly check
+   rewrites only this block. Dates are YYYY-MM-DD; leave `ends`
+   empty when the game hasn't announced it. status: 'live',
+   'soon' (starts later) or 'maybe' (not officially confirmed).
+   ============================================================ */
+const LIVE = {
+  updated:'2026-10-09',
+  genshin:{ items:[
+    {t:'Vesna', k:'New 5★ · Version 7.1', s:'2026-09-23', e:'', status:'live'},
+    {t:'Vodyanitsa', k:'New 5★ · Version 7.1', s:'2026-09-23', e:'', status:'live'}
+  ], src:['PlayNews — Genshin 7.1 release and banners','https://www.playnews.gg/en/release-dates/genshin-impact-version-7-1-a-rekviem-for-the-afterlife-launches-september-23-vesna-and-vodyanitsa-revealed']},
+  hsr:{ items:[
+    {t:'Pearl', k:'New 5★ · Version 4.6', s:'2026-09-27', e:'2026-11-10', status:'live'},
+    {t:'Evanescia', k:'Rerun 5★ · Phase 1', s:'2026-09-27', e:'2026-10-21', status:'live'},
+    {t:'Mortenax Blade', k:'Rerun 5★ · Phase 2', s:'2026-10-21', e:'2026-11-10', status:'soon'}
+  ], src:['All Things How — Star Rail 4.6 banner schedule','https://allthings.how/honkai-star-rail-4-6-banners-and-events-full-schedule-and-release-times/']},
+  zzz:{ items:[
+    {t:'Roxy', k:'New S-Rank · Version 3.2', s:'2026-09-30', e:'2026-10-20', status:'live'},
+    {t:'Promeia', k:'Rerun S-Rank · Phase II', s:'2026-09-30', e:'2026-10-20', status:'live'}
+  ], src:['Icy Veins — ZZZ Exclusive Channel','https://www.icy-veins.com/zenless-zone-zero/exclusive-channel']},
+  wuwa:{ items:[
+    {t:'Hsin', k:'New 5★ · Version 3.7', s:'2026-10-01', e:'', status:'maybe', note:'Banner dates not confirmed by Kuro yet'}
+  ], src:['FandomWire — Wuthering Waves 3.7 banners','https://fandomwire.com/all-upcoming-wuthering-waves-3-7-banners/']},
+  arknights:{ items:[], src:null},
+  mlbb:{ items:[
+    {t:'Sun · Celestial Rebel', k:'Exquisite Collection', s:'2026-10-01', e:'', status:'live'},
+    {t:'Hayabusa · Kitsune’s Shadow', k:'Starlight · 300 Diamonds', s:'2026-10-01', e:'', status:'live'},
+    {t:'Selena & Obsidia', k:'Aspirants draw', s:'2026-10-09', e:'', status:'live'},
+    {t:'Anniversary Weekend Gala', k:'Free · pick 1 skin', s:'2026-10-09', e:'2026-10-11', status:'live'},
+    {t:'Zilong · Ascendant of Flame', k:'Design contest skin', s:'2026-10-16', e:'', status:'soon'},
+    {t:'Random special skin box', k:'Free · anniversary quests', s:'2026-10-16', e:'2026-11-08', status:'soon'},
+    {t:'Helcurt · Scorpio', k:'Zodiac Summon rerun', s:'2026-10-23', e:'', status:'soon'}
+  ], src:['GameMarket — every MLBB skin in October 2026','https://gamemarket.gg/news/mobile-legends-bang-bang/mlbb-october-2026-a-full-recap-of-every-upcoming-skin']}
+};
+
+/* ============================================================
+   UI
+   ============================================================ */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const safeUrl=u=>{ try{ const x=new URL(u); return x.protocol==='https:'?esc(x.href):'#'; }catch(e){ return '#'; } }; // only plain https links reach the page
+const pctNum=x=>{ if(x>=0.9995) return 100; if(x<0.0005) return 0; const v=x*100; return v<10?Math.round(v*10)/10:Math.round(v); };
+const pct=x=>pctNum(x)+'%';
+const usd=n=>'$'+n.toFixed(2);
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const calm=matchMedia('(prefers-reduced-motion: reduce)');
+const TABNAMES={genshin:{char:'Character',weapon:'Weapon'},hsr:{char:'Character',lc:'Light Cone'},zzz:{agent:'Agent',wengine:'W-Engine'},wuwa:{char:'Resonator',weapon:'Weapon'},arknights:{standard:'Standard',single:'Single rate-up',limited:'Limited'}};
+
+// Saved values come from the browser, so check them before use: unknown games or plans fall back
+// to defaults, and every number is forced back into a whole, non-negative number.
+const clean=(n,max=1e9)=>{ n=Math.floor(Number(n)); return Number.isFinite(n)?Math.min(Math.max(n,0),max):0; };
+const state=(()=>{ const s=store.get('gc_state',{}); const o={game:'genshin',tab:{},plan:'p90'};
+  if(s&&typeof s==='object'){ if(GAMES.hasOwnProperty(s.game)) o.game=s.game; if(['avg','p90','max'].includes(s.plan)) o.plan=s.plan;
+    if(s.tab&&typeof s.tab==='object') for(const k in s.tab) if(GAMES.hasOwnProperty(k)&&typeof s.tab[k]==='string') o.tab[k]=s.tab[k]; }
+  return o; })();
+const inputs=store.get('gc_inputs',{})||{};
+function I(gk,bk){ const k=gk+':'+bk, v=inputs[k]||{};
+  inputs[k]={pity:clean(v.pity,98),g:v.g===true,currency:clean(v.currency),tickets:clean(v.tickets,1e6),copies:Math.max(1,clean(v.copies,7)),bannerPulls:clean(v.bannerPulls,1e5)};
+  return inputs[k]; }
+function save(){ store.set('gc_state',state); store.set('gc_inputs',inputs); }
+
+/* ---------- motion helpers ---------- */
+function countTo(el,to,{format=fmt,dur=700}={}){
+  if(!el) return; const from=el._v??0; el._v=to; cancelAnimationFrame(el._raf);
+  if(calm.matches||from===to){ el.innerHTML=format(to); return; }
+  const t0=performance.now();
+  const step=now=>{ const k=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-k,4); el.innerHTML=format(from+(to-from)*e); if(k<1) el._raf=requestAnimationFrame(step); };
+  el._raf=requestAnimationFrame(step);
+}
+const bigPct=v=>{ const r=v>=10||v===0?Math.round(v):Math.round(v*10)/10; return `${r}<sup>%</sup>`; };
+function splitChars(s){ return [...s].map((c,i)=>c===' '?' ':`<span class="ch" style="--i:${i}">${esc(c)}</span>`).join(''); }
+function slide(container,activeSel,lineSel){
+  const a=container.querySelector(activeSel), line=container.querySelector(lineSel); if(!a||!line) return;
+  line.style.left=a.offsetLeft+'px'; line.style.width=a.offsetWidth+'px';
+}
+document.addEventListener('pointermove',e=>{ const c=e.target.closest&&e.target.closest('.card'); if(!c) return; const r=c.getBoundingClientRect(); c.style.setProperty('--mx',(e.clientX-r.left)+'px'); c.style.setProperty('--my',(e.clientY-r.top)+'px'); },{passive:true});
+addEventListener('resize',()=>{ slide($('#games'),'.chip[aria-pressed="true"]','.pill'); const t=$('.tabs'); if(t) slide(t,'.tab[aria-selected="true"]','.tabline'); });
+
+/* ---------- live now ---------- */
+const DAY=86400000;
+const parseDay=s=>s?new Date(s+'T12:00:00'):null;
+const nice=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+function liveHTML(gk){
+  const L=LIVE[gk]; const now=new Date();
+  const items=(L?.items||[]).filter(x=>{const e=parseDay(x.e); return !e||e>=new Date(now.getTime()-DAY);});
+  const body=items.length?items.map((x,i)=>{
+    const s=parseDay(x.s), e=parseDay(x.e); let st=x.status, when;
+    if(s&&s>now){ st=st==='maybe'?'maybe':'soon'; const d=Math.ceil((s-now)/DAY); when=`Starts <b>${nice(s)}</b> · in ${d} day${d===1?'':'s'}`; }
+    else if(e){ const d=Math.max(0,Math.ceil((e-now)/DAY)); when=`Ends <b>${nice(e)}</b> · ${d===0?'last day':d+' day'+(d===1?'':'s')+' left'}`; st=st==='maybe'?'maybe':'live'; }
+    else when=s?`Since <b>${nice(s)}</b> · end date not announced`:'Dates not announced';
+    const tag=st==='soon'?'Coming up':st==='maybe'?'Expected':'Live now';
+    return `<div class="lv ${st}" style="--i:${i}"><div class="k"><i></i>${tag} · ${esc(x.k)}</div><div class="t">${esc(x.t)}</div><div class="d">${when}${x.note?'<br>'+esc(x.note):''}</div></div>`;
+  }).join(''):`<div class="lv soon" style="--i:0"><div class="k"><i></i>Nothing listed</div><div class="d" style="margin-top:6px">No confirmed banner dates yet. The weekly check adds them when the game announces them.</div></div>`;
+  return `<div class="livehead"><h3>Happening now</h3><span>Checked ${nice(parseDay(LIVE.updated))}${L?.src?` · <a href="${safeUrl(L.src[1])}" target="_blank" rel="noopener noreferrer">source</a>`:''}</span></div><div class="live">${body}</div>`;
+}
+
+/* ---------- shell ---------- */
+function renderNav(){
+  const nav=$('#games');
+  nav.innerHTML='<span class="pill"></span>'+Object.entries(GAMES).map(([k,g])=>`<button class="chip" data-g="${k}" style="--c:${g.color}" aria-pressed="${k===state.game}"><span class="dot" style="background:${g.color}"></span>${esc(g.short)}</button>`).join('');
+  nav.querySelectorAll('.chip').forEach(b=>b.onclick=()=>switchGame(b.dataset.g,b));
+  slide(nav,'.chip[aria-pressed="true"]','.pill');
+}
+function switchGame(k,btn){
+  if(k===state.game) return;
+  const r=btn.getBoundingClientRect(); document.documentElement.style.setProperty('--vx',(r.left+r.width/2)+'px'); document.documentElement.style.setProperty('--vy',(r.top+r.height/2)+'px');
+  const go=()=>{ state.game=k; save(); render(); };
+  try{ if(document.startViewTransition && !calm.matches) return document.startViewTransition(go); }catch(e){}
+  go();
+}
+function render(){
+  renderNav();
+  const g=GAMES[state.game]; document.documentElement.style.setProperty('--accent',g.color);
+  const tabs=g.special?['wheel','zodiac','collector','other','wr']:Object.keys(g.banners).concat(g.combo?['combo']:[],['sim']);
+  let tab=state.tab[state.game]; if(!tabs.includes(tab)) tab=tabs[0];
+  const label=k=>({combo:'Both',sim:'Try your luck',wheel:'Magic Wheel',zodiac:'Zodiac',collector:'Collector',other:'Other draws',wr:'Win rate'})[k]||TABNAMES[state.game][k];
+  $('#app').innerHTML=`
+    <div class="gamehead"><div><div class="eyebrow">${g.special?'Diamond planner':'Pity &amp; cost calculator'}</div><h1>${splitChars(g.name)}</h1></div><p>${g.special?'Fixed prices only, no guessed drop rates':'1 pull = '+g.perPull+' '+esc(g.currency)}</p></div>
+    ${liveHTML(state.game)}
+    <div class="tabs" role="tablist">${tabs.map(k=>`<button class="tab" role="tab" data-t="${k}" aria-selected="${k===tab}">${esc(label(k))}</button>`).join('')}<span class="tabline"></span></div>
+    <div id="panel"></div>`;
+  const t=$('.tabs'); const centre=()=>{ const a=t.querySelector('.tab[aria-selected="true"]'); slide(t,'.tab[aria-selected="true"]','.tabline'); if(a) t.scrollTo({left:a.offsetLeft-(t.clientWidth-a.offsetWidth)/2,behavior:'smooth'}); };
+  requestAnimationFrame(centre);
+  t.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{ state.tab[state.game]=b.dataset.t; save(); t.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',x===b)); centre(); showTab(g,b.dataset.t); });
+  showTab(g,tab);
+}
+function showTab(g,tab){
+  if(g.special) return ({wheel:mlWheel,zodiac:mlZodiac,collector:mlCollector,other:mlOther,wr:mlWR})[tab](g);
+  if(tab==='combo') renderCombo(g); else if(tab==='sim') renderSim(g); else renderBanner(g,tab);
+}
+
+/* ---------- form pieces ---------- */
+function stepper(id,val,max){ return `<div class="stepper"><input id="${id}" type="number" inputmode="numeric" min="0" ${max!=null?`max="${max}"`:''} value="${val}"><button type="button" class="sb m" data-for="${id}" data-d="-1" aria-label="Less">−</button><button type="button" class="sb p" data-for="${id}" data-d="1" aria-label="More">+</button></div>`; }
+function wireSteppers(root){ root.querySelectorAll('.sb').forEach(b=>b.onclick=()=>{ const el=document.getElementById(b.dataset.for); const mx=el.max===''?Infinity:+el.max; el.value=Math.max(0,Math.min(mx,(+el.value||0)+ +b.dataset.d)); el.dispatchEvent(new Event('input')); }); }
+function walletFields(g,v,prefix){
+  return `<div class="row2">
+    <div class="field"><label for="${prefix}cur">${esc(g.currency)} you have</label><input id="${prefix}cur" type="number" inputmode="numeric" min="0" step="1" value="${v.currency}"></div>
+    <div class="field"><label for="${prefix}tix">${esc(g.ticket)}</label><input id="${prefix}tix" type="number" inputmode="numeric" min="0" step="1" value="${v.tickets}"></div>
+  </div><p class="hint" id="${prefix}have"></p>`;
+}
+function bannerFields(g,bk,v,prefix,title){
+  const b=g.banners[bk], star=b.hard>=99?'6★':'5★';
+  return `${title?`<div class="eyebrow" style="margin:2px 0 14px">${esc(title)}</div>`:''}
+    <div class="field"><label for="${prefix}pity">Pulls since your last ${star} (your pity)</label>${stepper(prefix+'pity',v.pity,b.hard-1)}<p class="hint">Find it in your pull history. 0 if you just got one.</p></div>
+    ${b.guar?`<div class="field"><span class="lbl">Was your last ${star} off-banner?</span><div class="toggle">
+      ${b.guarLabels.map((l,i)=>`<button type="button" data-g="${i}" aria-pressed="${!!i===v.g}">${i?'Yes':'No'}<small>${esc(i?'Next '+star+' is guaranteed':'Normal odds')}</small></button>`).join('')}</div></div>`:''}
+    ${(b.rule150||b.spark)?`<div class="field"><label for="${prefix}bp">Pulls already done on this banner</label>${stepper(prefix+'bp',v.bannerPulls)}</div>`:''}
+    <div class="field"><span class="lbl">What do you want?</span><div class="seg">${b.copies.map((c,i)=>`<button type="button" data-c="${i+1}" aria-pressed="${v.copies===i+1}">${esc(c)}</button>`).join('')}</div></div>`;
+}
+function wire(prefix,v,onchange){
+  const num=(id,key,max)=>{const el=document.getElementById(prefix+id); if(!el) return; el.oninput=()=>{let n=Math.max(0,Math.floor(+el.value||0)); if(max!=null) n=Math.min(n,max); v[key]=n; save(); onchange();};};
+  return {num, toggles:(root)=>{
+    wireSteppers(root);
+    root.querySelectorAll('.toggle button').forEach(b=>b.onclick=()=>{v.g=b.dataset.g==='1'; root.querySelectorAll('.toggle button').forEach(x=>x.setAttribute('aria-pressed',x===b)); save(); onchange(true);});
+    root.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{v.copies=+b.dataset.c; root.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b)); save(); onchange(true);});
+  }};
+}
+function pullsHave(g,v){ return Math.floor(v.currency/g.perPull)+v.tickets; }
+
+/* ---------- results ---------- */
+function oddsSkeleton(){
+  return `<div class="big"><span class="n" id="o_big">0<sup>%</sup></span><span class="of" id="o_of"></span></div>
+    <p class="verdict" id="o_ver"><i></i><span></span></p>
+    <div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+      <div class="stat"><div class="v" id="o_mean">0</div><div class="k">Average pulls</div></div>
+      <div class="stat"><div class="v" id="o_p90">0</div><div class="k">90% sure by</div></div>
+      <div class="stat"><div class="v" id="o_worst">0</div><div class="k">Guaranteed by</div></div>
+    </div>
+    <div class="chartbox" id="o_chart"></div>`;
+}
+function verdictFor(ch){
+  if(ch>=0.999) return ['var(--good)',`You're set. Even the worst luck can't stop you.`];
+  if(ch>=0.9) return ['var(--good)',`Very likely. Only bad luck stops you.`];
+  if(ch>=0.5) return ['var(--accent)',`Better than a coin flip, but not safe.`];
+  if(ch>0) return ['var(--warn)',`Unlikely with what you have now.`];
+  return ['var(--bad)',`You need more pulls to have any chance.`];
+}
+function showOdds(S,have,goalText,redraw){
+  const ch=S.chance(have);
+  countTo($('#o_big'),pctNum(ch),{format:bigPct,dur:900});
+  $('#o_of').innerHTML=goalText;
+  const [c,t]=verdictFor(ch), ver=$('#o_ver'); ver.style.setProperty('--v',c); ver.querySelector('span').textContent=t;
+  countTo($('#o_mean'),S.mean); countTo($('#o_p90'),S.p90);
+  const w=$('#o_worst'); if(S.worst){ countTo(w,S.worst); } else { w._v=0; w.textContent='No cap'; }
+  drawChart($('#o_chart'),S.cdf,have,redraw);
+}
+function drawChart(box,cdf,mark,redraw){
+  const W=640,H=190,pl=36,pr=12,pt=12,pb=26;
+  let n=cdf.length-1; for(let t=1;t<cdf.length;t++){ if(cdf[t]>0.9999){n=t;break;} }
+  n=Math.max(n,Math.min(mark,cdf.length-1),10);
+  const C=t=>cdf[Math.min(Math.max(t,0),cdf.length-1)];
+  const x=t=>pl+(W-pl-pr)*t/n, y=p=>pt+(H-pt-pb)*(1-p);
+  const N=160; let d=''; for(let k=0;k<=N;k++){ const t=Math.round(n*k/N); d+=(k?'L':'M')+x(t).toFixed(1)+','+y(C(t)).toFixed(1); }
+  const area=d+`L${x(n)},${y(0)}L${x(0)},${y(0)}Z`;
+  const mk=Math.min(mark,n), mp=C(mk);
+  const ticks=[0,.25,.5,.75,1].map(f=>Math.round(n*f));
+  let svg=box.querySelector('svg');
+  if(!svg||redraw){
+    box.innerHTML=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Chance by number of pulls">
+      <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".28"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+      ${[0,.5,.9,1].map(p=>`<line x1="${pl}" x2="${W-pr}" y1="${y(p)}" y2="${y(p)}" stroke="var(--line)" ${p===.5||p===.9?'stroke-dasharray="2 4"':''}/><text x="${pl-8}" y="${y(p)+3.5}" text-anchor="end">${p*100}%</text>`).join('')}
+      <g class="xt">${ticks.map((t,i)=>`<text y="${H-7}" text-anchor="middle"></text>`).join('')}</g>
+      <path class="area" fill="url(#ga)"/><path class="line draw"/>
+      <g class="you"><line class="yl" stroke="var(--ink3)" stroke-dasharray="3 3"/><circle class="ring" r="6"/><circle class="dot" r="4.5" fill="var(--ink)" stroke="var(--bg)" stroke-width="2"/></g>
+      <g class="hover"><line class="hl" stroke="var(--accent)" stroke-opacity=".5"/><circle class="hd" r="4" fill="var(--accent)"/></g>
+      <rect class="hit" x="${pl}" y="${pt}" width="${W-pl-pr}" height="${H-pt-pb}" fill="transparent"/></svg><div class="tip"></div>`;
+    svg=box.querySelector('svg');
+    const line=svg.querySelector('.line'); line.setAttribute('d',d);
+    line.style.setProperty('--len',Math.ceil(line.getTotalLength()));
+    line.addEventListener('animationend',()=>line.classList.remove('draw'),{once:true});
+    svg.querySelector('.area').setAttribute('d',area);
+    const tip=box.querySelector('.tip');
+    svg.querySelector('.hit').onpointermove=e=>{
+      const st=svg._st; const r=svg.getBoundingClientRect(), sx=(e.clientX-r.left)*W/r.width;
+      const t=Math.max(0,Math.min(st.n,Math.round((sx-pl)/(W-pl-pr)*st.n))), p=st.C(t), hl=svg.querySelector('.hl');
+      hl.setAttribute('x1',st.x(t)); hl.setAttribute('x2',st.x(t)); hl.setAttribute('y1',pt); hl.setAttribute('y2',H-pb);
+      svg.querySelector('.hd').setAttribute('cx',st.x(t)); svg.querySelector('.hd').setAttribute('cy',st.y(p));
+      tip.style.left=(st.x(t)*r.width/W)+'px'; tip.style.top=(st.y(p)*r.height/H)+'px';
+      tip.innerHTML=`${t} pulls · <b>${pct(p)}</b>`;
+    };
+  } else { svg.querySelector('.line').setAttribute('d',d); svg.querySelector('.area').setAttribute('d',area); }
+  svg._st={n,C,x,y};
+  svg.querySelectorAll('.xt text').forEach((el,i)=>{ el.setAttribute('x',x(ticks[i])); el.textContent=ticks[i]; });
+  const you=svg.querySelector('.you'); you.style.display=mark>0?'':'none';
+  const yl=you.querySelector('.yl'); yl.setAttribute('x1',x(mk)); yl.setAttribute('x2',x(mk)); yl.setAttribute('y1',pt); yl.setAttribute('y2',H-pb);
+  you.querySelectorAll('circle').forEach(c=>{c.setAttribute('cx',x(mk)); c.setAttribute('cy',y(mp));});
+}
+
+// One plain answer: how many more pulls and what they cost, for the plan you pick.
+function costBox(g,S,have,animate){
+  const plans=[['avg','Average luck',Math.ceil(S.mean)],['p90','90% sure',S.p90]]; if(S.worst) plans.push(['max','Guaranteed',S.worst]);
+  let pick=plans.find(p=>p[0]===state.plan)||plans[1];
+  const line=(need)=>{ const short=Math.max(0,need-have), cur=short*g.perPull;
+    if(!short) return {short,cur,txt:`<b>You already have enough.</b> No top-up needed for this plan.`};
+    let money=''; if(g.packs){ const c=cheapestPacks(g.packs,cur); money=`<span class="money">${usd(c.cost)}</span><span class="hint">Cheapest packs: ${esc(c.mix.map(([p,n])=>`${n}× ${fmt(p[0])}`).join(' + '))}</span>`; }
+    return {short,cur,txt:`You need <b>${fmt(short)} more pulls</b> (${fmt(cur)} ${esc(g.currency)}).${money}`}; };
+  const rows=plans.map(([k,name,need],i)=>{ const L=line(need); let price='—';
+    if(!L.short) price='<span class="ok">Covered</span>'; else if(g.packs) price=usd(cheapestPacks(g.packs,L.cur).cost);
+    return `<tr style="--d:${i}"><td>${name}<div class="hint">${fmt(need)} pulls</div></td><td class="num">${L.short?fmt(L.short)+' pulls':'—'}<div class="hint">${L.short?fmt(L.cur)+' '+esc(g.currency):''}</div></td><td class="num"><span class="price">${price}</span></td></tr>`; }).join('');
+  $('#cost').innerHTML=`<div class="plans">${plans.map(([k,name])=>`<button type="button" data-p="${k}" aria-pressed="${k===pick[0]}">${name}</button>`).join('')}</div>
+    <p class="answer">${line(pick[2]).txt}</p>
+    <details class="more"><summary>Compare all plans${g.pass?' and the monthly pass':''}</summary><div>
+      <table class="costs"><thead><tr><th>Plan</th><th style="text-align:right">You're short</th><th style="text-align:right">${g.packs?'Cheapest top-up':'Top-up'}</th></tr></thead><tbody class="${animate?'anim':''}">${rows}</tbody></table>
+      ${g.pass?`<p class="note"><strong>${esc(g.pass.name)}</strong> (${usd(g.pass.price)}): ${esc(g.pass.desc)}. That's about ${(g.pass.amount/g.perPull).toFixed(2)} pulls for ${usd(g.pass.price)} if you log in every day, the cheapest way to get pulls by far.</p>`:''}
+      <p class="note">${g.packs?'Prices use the normal store bonus (for example 1,980 + 260 for $29.99). Your first buy of each pack size gives double, so it goes further.':'Arknights store prices vary by region, so this shows Orundum only.'}</p></div></details>`;
+  $('#cost').querySelectorAll('.plans button').forEach(b=>b.onclick=()=>{ state.plan=b.dataset.p; save(); costBox(g,S,have,false); });
+}
+
+function howItWorks(g,bk){
+  const b=g.banners[bk];
+  return `<details class="more"><summary>How this is calculated</summary><div class="rules" style="margin-top:12px">
+    <dl><dt>Base rate</dt><dd>${(b.base*100).toFixed(1)}%</dd><dt>With pity</dt><dd>${b.consolidated}</dd>
+    <dt>Hard pity</dt><dd>${b.hard===99?'pull 99 (+2% each pull after 50)':'pull '+b.hard}</dd><dt>Featured</dt><dd class="t">${esc(b.qNote)}</dd></dl>
+    ${b.hard===99?'':`<p class="note">Games publish the base rate, the rate with pity, and hard pity. The boost near the end (soft pity, from about pull ${b.soft}) comes from player data, tuned so the average matches the published ${b.consolidated}.</p>`}
+    ${sourcesHTML(g)}</div></details>`;
+}
+function sourcesHTML(g){ return `<div class="src"><strong>Sources</strong><ol>${g.sources.map(([t,u])=>`<li><a href="${safeUrl(u)}" target="_blank" rel="noopener noreferrer">${esc(t)}</a></li>`).join('')}</ol></div>`; }
+
+function renderBanner(g,bk){
+  const b=g.banners[bk], v=I(state.game,bk), w=I(state.game,'wallet');
+  $('#panel').innerHTML=`<div class="grid">
+    <section class="card" style="--d:0"><h2>Where you are</h2><div id="bf">${bannerFields(g,bk,v,'b_')}</div>${walletFields(g,w,'b_')}</section>
+    <section class="card" style="--d:1"><h2>Your chance</h2>${oddsSkeleton()}</section>
+  </div>
+  <section class="card mt" style="--d:2"><h2>What it costs</h2><div id="cost"></div>${howItWorks(g,bk)}</section>`;
+  let first=true;
+  const run=(redraw)=>{
+    const have=pullsHave(g,w); $('#b_have').textContent=`That's ${fmt(have)} pull${have===1?'':'s'}.`;
+    const o={pity:v.pity,guaranteed:b.guar&&v.g,copies:v.copies,bannerPulls:v.bannerPulls};
+    const S=summarize(pullDist(b,o),worstPulls(b,o));
+    showOdds(S,have,`chance to get <b>${esc(b.copies[v.copies-1])}</b> with your ${fmt(have)} pulls`,first||redraw===true);
+    costBox(g,S,have,first); first=false;
+  };
+  const wv=wire('b_',v,run); wv.num('pity','pity',b.hard-1); wv.num('bp','bannerPulls'); wv.toggles($('#bf'));
+  const ww=wire('b_',w,run); ww.num('cur','currency'); ww.num('tix','tickets');
+  run();
+}
+
+function renderCombo(g){
+  const [ak,bk]=g.combo, A=g.banners[ak], B=g.banners[bk], va=I(state.game,ak), vb=I(state.game,bk), w=I(state.game,'wallet');
+  const na=TABNAMES[state.game][ak], nb=TABNAMES[state.game][bk];
+  $('#panel').innerHTML=`<div class="grid">
+    <section class="card" style="--d:0"><h2>Where you are</h2><div id="fa">${bannerFields(g,ak,va,'ca_',na)}</div><hr style="border:0;border-top:1px solid var(--line);margin:8px 0 20px"><div id="fb">${bannerFields(g,bk,vb,'cb_',nb)}</div>${walletFields(g,w,'cw_')}</section>
+    <section class="card" style="--d:1"><h2>Chance to get both</h2>${oddsSkeleton()}<p class="note">Get the ${esc(A.item)} first. Only start on the ${esc(B.item)} once you have them.</p></section></div>
+    <section class="card mt" style="--d:2"><h2>What it costs</h2><div id="cost"></div><details class="more"><summary>Sources</summary><div>${sourcesHTML(g)}</div></details></section>`;
+  let first=true;
+  const run=(redraw)=>{
+    const have=pullsHave(g,w); $('#cw_have').textContent=`That's ${fmt(have)} pulls for both.`;
+    const oa={pity:va.pity,guaranteed:A.guar&&va.g,copies:va.copies}, ob={pity:vb.pity,guaranteed:B.guar&&vb.g,copies:vb.copies};
+    const wa=worstPulls(A,oa), wb=worstPulls(B,ob);
+    const S=summarize(convolve(pullDist(A,oa),pullDist(B,ob)),wa!=null&&wb!=null?wa+wb:null);
+    showOdds(S,have,`chance to get <b>${esc(A.copies[va.copies-1])} + ${esc(B.copies[vb.copies-1])}</b> with ${fmt(have)} pulls`,first||redraw===true);
+    costBox(g,S,have,first); first=false;
+  };
+  const wa=wire('ca_',va,run); wa.num('pity','pity',A.hard-1); wa.toggles($('#fa'));
+  const wb=wire('cb_',vb,run); wb.num('pity','pity',B.hard-1); wb.toggles($('#fb'));
+  const ww=wire('cw_',w,run); ww.num('cur','currency'); ww.num('tix','tickets');
+  run();
+}
+
+/* ---------- try your luck ---------- */
+function renderSim(g){
+  const keys=Object.keys(g.banners);
+  $('#panel').innerHTML=`<section class="card" style="--d:0"><h2>Try your luck</h2>
+    <p class="note" style="margin-top:-6px">Random pulls at the real rates. Just for fun.</p>
+    <div class="row2 mt"><div class="field"><label for="s_b">Banner</label><select id="s_b">${keys.map(k=>`<option value="${k}">${esc(TABNAMES[state.game][k])}</option>`).join('')}</select></div>
+    <div class="field"><label for="s_n">Pulls</label><select id="s_n"><option>10</option><option selected>90</option><option>180</option></select></div></div>
+    <button class="btn" id="s_go">Pull</button><div id="s_out"></div></section>`;
+  $('#s_go').onclick=()=>{
+    const b=g.banners[$('#s_b').value], n=+$('#s_n').value, star=b.hard===99?'6★':'5★';
+    let p=0,gu=false,tiles=[],hits=0,offs=0,firstHit=null;
+    for(let t=1;t<=n;t++){ p++;
+      if(Math.random()<rateAt(b,p)){ const win=gu||Math.random()<b.q; if(win){hits++; if(firstHit==null) firstHit=t;} else offs++; gu=b.guar&&!win; tiles.push(`<div class="tile ${win?'f':'o'}" style="--i:${t}" title="Pull ${t}: ${star} at pity ${p}"><span>${p}</span></div>`); p=0; }
+      else tiles.push(`<div class="tile" style="--i:${t}" title="Pull ${t}"></div>`); }
+    $('#s_out').innerHTML=`<div class="reel">${tiles.join('')}</div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Featured ${star} (number = pity)</span><span><i style="background:var(--warn)"></i>Off-banner ${star}</span></div>
+      <div class="simsum"><div><b>${hits}</b>featured</div><div><b>${offs}</b>off-banner</div><div><b>${firstHit??'—'}</b>first featured on pull</div></div>`;
+    if(firstHit && !calm.matches) setTimeout(()=>{ const f=$('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); },firstHit*14+120);
+  };
+}
+
+/* ============================================================
+   MOBILE LEGENDS — fixed prices only. Moonton doesn't publish
+   drop rates, so nothing here guesses them.
+   ============================================================ */
+const ml=store.get('gc_ml',{});
+const ML0={dia:0,draws:50,zown:0,zsp:0,zdia:0,cdays:14,cneed:60,cdia:0,cten:false,ocost:50,ofirst:50,odays:14,oneed:50,odia:0};
+for(const k in ML0) ml[k]= k==='cten' ? ml[k]===true : (ml[k]==null ? ML0[k] : clean(ml[k]));
+for(const k in ml) if(!(k in ML0)) delete ml[k];
+const mlSave=()=>store.set('gc_ml',ml);
+function wdpLine(short){ if(short<=0) return ''; const n=Math.ceil(short/220); return `<p class="note">To cover it with Weekly Diamond Passes you'd need <strong>${n}</strong> (220 Diamonds each: 80 right away, then 20 a day for 7 days). They stack, and the price depends on your region.</p>`; }
+const numField=(id,label,val,hint)=>`<div class="field"><label for="${id}">${label}</label><input id="${id}" type="number" inputmode="numeric" min="0" value="${val}">${hint?`<p class="hint">${hint}</p>`:''}</div>`;
+function mlShell(g,left,right,facts){
+  $('#panel').innerHTML=`<div class="grid"><section class="card" style="--d:0"><h2>Your plan</h2>${left}</section>
+    <section class="card" style="--d:1"><h2>Diamonds needed</h2><div class="big"><span class="n" id="m_big">0</span><span class="of" id="m_of"></span></div><p class="verdict" id="m_ver"><i></i><span></span></p>${right}<div id="m_wdp"></div>
+    <details class="more"><summary>Prices and sources</summary><div class="rules" style="margin-top:12px">${facts?`<dl>${facts}</dl>`:''}${sourcesHTML(g)}</div></details></section></div>`;
+}
+function mlBind(pairs,run){ pairs.forEach(([id,k])=>{ const el=$('#'+id); if(el) el.oninput=()=>{ml[k]=Math.max(0,Math.floor(+el.value||0));mlSave();run();}; }); wireSteppers($('#panel')); run(); }
+function mlVerdict(short,text){ const v=$('#m_ver'); v.style.setProperty('--v',short?'var(--warn)':'var(--good)'); v.querySelector('span').textContent=text; $('#m_wdp').innerHTML=wdpLine(short); }
+const statRow=(a)=>`<div class="stats" style="grid-template-columns:repeat(${a.length},minmax(0,1fr))">${a.map(([id,k])=>`<div class="stat"><div class="v" id="${id}">0</div><div class="k">${k}</div></div>`).join('')}</div>`;
+
+function mlWheel(g){
+  mlShell(g, numField('m_d','Diamonds you have',ml.dia)+`<div class="field"><label for="m_n">Draws you want to do</label>${stepper('m_n',ml.draws)}<p class="hint">A Legend skin costs 200 Magic Cores. Moonton doesn't say how many Cores a draw gives, so plan by draws.</p></div>`,
+    statRow([['m_5','5-draw buys'],['m_1','Single draws'],['m_sv','Saved vs singles']])+`<p class="note">Always buy 5 at a time: 54 Diamonds a draw instead of 60.</p>`,
+    `<dt>1 draw</dt><dd>60 Diamonds</dd><dt>5 draws</dt><dd>270 Diamonds</dd><dt>Legend skin</dt><dd>200 Magic Cores</dd>`);
+  mlBind([['m_d','dia'],['m_n','draws']],()=>{ const n=ml.draws, f=Math.floor(n/5), r=n%5, cost=f*270+r*60, short=Math.max(0,cost-ml.dia), afford=Math.floor(ml.dia/270)*5+Math.floor((ml.dia%270)/60);
+    countTo($('#m_big'),cost); $('#m_of').textContent=`for ${fmt(n)} draws`;
+    mlVerdict(short,`${short?`You're ${fmt(short)} short.`:'You have enough.'} You can afford ${fmt(afford)} draws right now.`);
+    countTo($('#m_5'),f); countTo($('#m_1'),r); countTo($('#m_sv'),f*30); });
+}
+function mlZodiac(g){
+  mlShell(g, `<div class="field"><label for="z_own">Zodiac skins you already own</label>${stepper('z_own',ml.zown,12)}<p class="hint">Each one starts you at +10 Star Power, up to +60.</p></div>`
+    +numField('z_sp','Star Power you have now',ml.zsp,'Leave at 0 if you haven’t drawn this rotation.')+numField('z_d','Diamonds you have',ml.zdia),
+    statRow([['z_best','Best case'],['z_worst','Guaranteed by'],['z_need','Star Power to go']])+`<p class="note">Each draw gives 1 to 5 Star Power at random, and you need 100. Moonton doesn't publish the odds for each amount, so this shows the best case and the guaranteed cost.</p>`,
+    `<dt>1 draw</dt><dd>20 Diamonds</dd><dt>Star Power</dt><dd>1–5 per draw, 100 for the skin</dd><dt>Owned Zodiac skins</dt><dd>+10 each, max +60</dd>`);
+  mlBind([['z_own','zown'],['z_sp','zsp'],['z_d','zdia']],()=>{ const start=Math.max(Math.min(60,ml.zown*10),ml.zsp), need=Math.max(0,100-start), best=Math.ceil(need/5), worst=need, cost=worst*20, short=Math.max(0,cost-ml.zdia);
+    countTo($('#m_big'),cost); $('#m_of').textContent=`to guarantee the skin (${fmt(worst)} draws)`;
+    mlVerdict(short,need===0?'Your Star Power is full. Claim the skin.':`${short?`You're ${fmt(short)} short of the guarantee.`:'You can guarantee it.'} With good luck it takes only ${fmt(best*20)}.`);
+    countTo($('#z_best'),best); countTo($('#z_worst'),worst); countTo($('#z_need'),need); });
+}
+function mlCollector(g){
+  mlShell(g, `<p class="note" style="margin:-6px 0 16px">For Exquisite Collection (Collector skin) events. Check the event screen for how many draws the skin takes.</p>`
+    +`<div class="row2">${numField('c_days','Days left in the event',ml.cdays)}${numField('c_need','Draws you plan to do',ml.cneed)}</div>`+numField('c_dia','Diamonds you have',ml.cdia)
+    +`<div class="field"><span class="lbl">Used your discounted first 10x yet?</span><div class="toggle" id="c_ten"><button type="button" data-v="0" aria-pressed="${!ml.cten}">No<small>Your first 10x is 30% off</small></button><button type="button" data-v="1" aria-pressed="${!!ml.cten}">Yes<small>Already used</small></button></div></div>`,
+    statRow([['c_dc','Half-price daily draws'],['c_fp','Full-price draws'],['c_sv','Saved']])+`<p class="note">Do your half-price draw every day first. Stop as soon as the skin drops.</p>`,
+    `<dt>1 draw</dt><dd>50 Diamonds</dd><dt>First draw each day</dt><dd>25 Diamonds</dd><dt>First 10x</dt><dd>30% off, once</dd>`);
+  $('#c_ten').querySelectorAll('button').forEach(b=>b.onclick=()=>{ ml.cten=b.dataset.v==='1'; mlSave(); $('#c_ten').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); run(); });
+  const run=()=>{ const n=ml.cneed, daily=Math.min(ml.cdays,n); let rest=n-daily, ten=0;
+    if(!ml.cten && rest>=10){ ten=10; rest-=10; }
+    const cost=daily*25+ten*35+rest*50, full=n*50, short=Math.max(0,cost-ml.cdia);
+    countTo($('#m_big'),cost); $('#m_of').textContent=`for ${fmt(n)} draws, the cheapest way`;
+    mlVerdict(short,`${daily} draws at 25${ten?', one 10x at 30% off':''}${rest?`, then ${rest} at 50`:''}.${short?` You're ${fmt(short)} short.`:' You have enough.'}`);
+    countTo($('#c_dc'),daily); countTo($('#c_fp'),rest+ten); countTo($('#c_sv'),full-cost); };
+  mlBind([['c_days','cdays'],['c_need','cneed'],['c_dia','cdia']],run);
+}
+function mlOther(g){
+  mlShell(g, `<p class="note" style="margin:-6px 0 16px">For Aspirants, collab and other token draws. Prices change every event, so copy them from the event screen.</p>`
+    +`<div class="row2">${numField('o_c','Normal draw price',ml.ocost)}${numField('o_f','First draw of the day',ml.ofirst,'Same as normal if there’s no discount.')}</div>`
+    +`<div class="row2">${numField('o_days','Days left',ml.odays)}${numField('o_need','Draws you need',ml.oneed,'Tokens needed ÷ tokens per draw.')}</div>`+numField('o_d','Diamonds you have',ml.odia),
+    statRow([['o_dc','Discounted draws'],['o_fp','Full-price draws'],['o_sv','Saved']])+`<p class="note">If the skin drops early, stop. Extra draws only make sense for the other rewards.</p>`, '');
+  mlBind([['o_c','ocost'],['o_f','ofirst'],['o_days','odays'],['o_need','oneed'],['o_d','odia']],()=>{ const disc=Math.min(ml.odays,ml.oneed), rest=ml.oneed-disc, cost=disc*ml.ofirst+rest*ml.ocost, short=Math.max(0,cost-ml.odia);
+    countTo($('#m_big'),cost); $('#m_of').textContent=`for ${fmt(ml.oneed)} draws`;
+    mlVerdict(short,`${short?`You're ${fmt(short)} short.`:'You have enough.'}`);
+    countTo($('#o_dc'),disc); countTo($('#o_fp'),rest); countTo($('#o_sv'),ml.oneed*ml.ocost-cost); });
+}
+function mlWR(){
+  const heroes=store.get('wrHeroes',{}); let edit=null;
+  for(const k in heroes){ let h=heroes[k]; if(!h||typeof h!=='object'){ delete heroes[k]; continue; }
+    if(h.matches!=null) h={name:h.name,m:h.matches,c:h.curr,t:h.target}; // heroes saved by the old version
+    heroes[k]={name:String(h.name||'').slice(0,40),m:clean(h.m,1e6),c:Math.min(100,Math.max(0,+h.c||0)),t:Math.min(99.9,Math.max(0,+h.t||0))}; }
+  $('#panel').innerHTML=`<div class="grid"><section class="card" style="--d:0"><h2 id="w_t">Add a hero</h2>
+    <div class="field"><label for="w_h">Hero</label><input id="w_h" type="text" maxlength="40" placeholder="e.g. Fanny"></div>
+    <div class="row2"><div class="field"><label for="w_m">Matches</label><input id="w_m" type="number" min="1" value="100"></div><div class="field"><label for="w_c">Win rate now (%)</label><input id="w_c" type="number" min="0" max="100" step="0.1" value="52"></div></div>
+    <div class="field"><label for="w_g">Win rate you want (%)</label><input id="w_g" type="number" min="0" max="99.9" step="0.1" value="55"></div>
+    <p class="verdict" id="w_out" style="--v:var(--accent)"><i></i><span></span></p><div style="display:flex;gap:8px"><button class="btn" id="w_s">Save hero</button><button class="btn ghost" id="w_x">Clear</button></div></section>
+    <section class="card" style="--d:1"><h2>Saved heroes</h2><div id="w_list"></div></section></div>`;
+  const need=(m,c,t)=>{const w=Math.round(m*c/100); if(t<=c) return 0; if(t>=100) return Infinity; return Math.ceil((t/100*m-w)/(1-t/100));};
+  const calc=()=>{const m=+$('#w_m').value||0,c=+$('#w_c').value||0,t=+$('#w_g').value||0,n=need(m,c,t),name=$('#w_h').value.trim()||'this hero';
+    $('#w_out span').textContent= t<=c?`${name} is already at ${t}% or higher.`: n===Infinity?'100% is only possible if you never lose.':`Win ${fmt(n)} in a row to take ${name} from ${c}% to ${t}%.`;};
+  const list=()=>{const ks=Object.keys(heroes); if(!ks.length){$('#w_list').innerHTML='<p class="empty">No heroes yet. Add one on the left.</p>';return;}
+    $('#w_list').innerHTML=ks.map((k,i)=>{const h=heroes[k],n=need(h.m,h.c,h.t),w=Math.min(100,h.c/h.t*100);
+      return `<div class="hero" style="animation-delay:${i*60}ms"><div style="flex:1;min-width:0"><div class="nm">${esc(h.name)}</div><div class="meta">${h.m} games · ${h.c}% → ${h.t}% · ${n?fmt(n)+' wins in a row':'goal reached'}</div><div class="bar"><i style="width:${w}%;animation-delay:${i*60+150}ms"></i></div></div>
+      <span class="confirm" data-row="${esc(k)}"><button class="mini" data-e="${esc(k)}">Edit</button><button class="mini" data-d="${esc(k)}">Delete</button></span></div>`;}).join('');
+    $('#w_list').querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const h=heroes[b.dataset.e];edit=b.dataset.e;$('#w_h').value=h.name;$('#w_m').value=h.m;$('#w_c').value=h.c;$('#w_g').value=h.t;$('#w_t').textContent='Editing '+h.name;calc();});
+    // two-step delete, since the page can't show pop-up confirmations
+    $('#w_list').querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ const k=b.dataset.d, box=b.parentElement;
+      box.innerHTML=`Delete? <button class="mini" data-yes>Yes</button><button class="mini" data-no>No</button>`;
+      box.querySelector('[data-yes]').onclick=()=>{delete heroes[k];store.set('wrHeroes',heroes);list();}; box.querySelector('[data-no]').onclick=list; });};
+  ['#w_h','#w_m','#w_c','#w_g'].forEach(s=>$(s).oninput=calc);
+  $('#w_s').onclick=()=>{const name=$('#w_h').value.trim(); if(!name){$('#w_h').focus();return;}
+    const k=edit||('h'+Date.now()); heroes[k]={name,m:+$('#w_m').value||0,c:+$('#w_c').value||0,t:+$('#w_g').value||0}; store.set('wrHeroes',heroes); $('#w_x').onclick(); list();};
+  $('#w_x').onclick=()=>{edit=null;$('#w_h').value='';$('#w_m').value=100;$('#w_c').value=52;$('#w_g').value=55;$('#w_t').textContent='Add a hero';calc();};
+  calc(); list();
+}
+
+$('#checked').textContent=CHECKED;
+render();
+if(document.fonts) document.fonts.ready.then(()=>{ slide($('#games'),'.chip[aria-pressed="true"]','.pill'); const t=$('.tabs'); if(t) slide(t,'.tab[aria-selected="true"]','.tabline'); });
+</script>
+</body></html>
